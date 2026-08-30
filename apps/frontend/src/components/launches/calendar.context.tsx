@@ -93,6 +93,7 @@ export interface Integrations {
   inBetweenSteps: boolean;
   editor: 'none' | 'normal' | 'markdown' | 'html';
   stripLinks?: boolean;
+  nativeSchedulingImport?: boolean;
   display: string;
   identifier: string;
   type: string;

@@ -74,6 +74,111 @@ export class PostsService {
     private _refreshIntegrationService: RefreshIntegrationService
   ) {}
 
+  async importScheduledPosts(orgId: string) {
+    const integrations = (
+      await this._integrationService.getIntegrationsList(orgId)
+    ).filter((integration) => {
+      const provider = this._integrationManager.getSocialIntegration(
+        integration.providerIdentifier
+      );
+      return (
+        !!provider?.getNativeScheduledPosts &&
+        !integration.disabled &&
+        !integration.refreshNeeded &&
+        !integration.inBetweenSteps
+      );
+    });
+    const results: Array<{
+      integrationId: string;
+      provider: string;
+      name: string;
+      status: 'success' | 'error';
+      created?: number;
+      updated?: number;
+      removed?: number;
+      error?: string;
+    }> = [];
+
+    for (const integration of integrations) {
+      const provider = this._integrationManager.getSocialIntegration(
+        integration.providerIdentifier
+      );
+      let accessToken = integration.token;
+
+      try {
+        if (
+          integration.providerIdentifier === 'youtube' &&
+          integration.tokenExpiration &&
+          dayjs(integration.tokenExpiration).isBefore(dayjs())
+        ) {
+          const refreshed = await this._refreshIntegrationService.refresh(
+            integration,
+            'while importing native scheduled videos'
+          );
+          if (!refreshed) {
+            throw new Error('The YouTube connection must be refreshed');
+          }
+          accessToken = refreshed.accessToken;
+        }
+
+        const scheduledPosts = await provider.getNativeScheduledPosts!(
+          accessToken,
+          integration.internalId
+        );
+        const changes = await this._postRepository.syncImportedScheduledPosts(
+          orgId,
+          integration.id,
+          integration.providerIdentifier,
+          scheduledPosts
+        );
+
+        results.push({
+          integrationId: integration.id,
+          provider: integration.providerIdentifier,
+          name: integration.name,
+          status: 'success',
+          ...changes,
+        });
+      } catch (error) {
+        results.push({
+          integrationId: integration.id,
+          provider: integration.providerIdentifier,
+          name: integration.name,
+          status: 'error',
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Native scheduled posts import failed',
+        });
+      }
+    }
+
+    return {
+      integrations: results,
+      created: results.reduce(
+        (total, result) => total + (result.created || 0),
+        0
+      ),
+      updated: results.reduce(
+        (total, result) => total + (result.updated || 0),
+        0
+      ),
+      removed: results.reduce(
+        (total, result) => total + (result.removed || 0),
+        0
+      ),
+      errors: results.filter((result) => result.status === 'error').length,
+    };
+  }
+
+  private guardImportedPost(post: Pick<Post, 'creationMethod'> | null) {
+    if (post?.creationMethod === CreationMethod.IMPORTED) {
+      throw new BadRequestException(
+        'Posts scheduled in the native app are read-only in Postiz'
+      );
+    }
+  }
+
   searchForMissingThreeHoursPosts() {
     return this._postRepository.searchForMissingThreeHoursPosts();
   }
@@ -654,6 +759,12 @@ export class PostsService {
   }
 
   async deletePost(orgId: string, group: string) {
+    const posts = await this._postRepository.getPostsByGroup(orgId, group);
+    if (posts.some((post) => post.creationMethod === CreationMethod.IMPORTED)) {
+      throw new BadRequestException(
+        'Posts scheduled in the native app must be cancelled in that app'
+      );
+    }
     const post = await this._postRepository.deletePost(orgId, group);
 
     if (post?.id) {
@@ -905,6 +1016,11 @@ export class PostsService {
   ): Promise<any[]> {
     const postList = [];
     for (const post of body.posts) {
+      if (post.value?.[0]?.id) {
+        this.guardImportedPost(
+          await this._postRepository.getPostById(post.value[0].id, orgId)
+        );
+      }
       if (
         (body.type === 'schedule' || body.type === 'now') &&
         !body.republish &&
@@ -987,6 +1103,8 @@ export class PostsService {
     if (!root) {
       throw new NotFoundException('Post not found');
     }
+
+    this.guardImportedPost(root);
 
     if (root.parentPostId) {
       throw new BadRequestException(
@@ -1133,6 +1251,7 @@ export class PostsService {
     if (!getPostById) {
       throw new BadRequestException('Post not found');
     }
+    this.guardImportedPost(getPostById);
 
     const state: State = status === 'draft' ? 'DRAFT' : 'QUEUE';
     await this._postRepository.changeState(id, state);
@@ -1157,6 +1276,10 @@ export class PostsService {
     republish = false
   ) {
     const getPostById = await this._postRepository.getPostById(id, orgId);
+    if (!getPostById) {
+      throw new BadRequestException('Post not found');
+    }
+    this.guardImportedPost(getPostById);
 
     if (action === 'schedule' && !republish) {
       this.guardAgainstRepublish(getPostById, 'changeDate');

@@ -2,6 +2,7 @@ import {
   AnalyticsData,
   AuthTokenDetails,
   PendingCheckResponse,
+  NativeScheduledPost,
   PostDetails,
   PostResponse,
   SocialProvider,
@@ -388,6 +389,64 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
     }
 
     return allPages;
+  }
+
+  async getScheduledPosts(
+    accessToken: string,
+    pageId: string
+  ): Promise<NativeScheduledPost[]> {
+    const scheduledPosts: NativeScheduledPost[] = [];
+    const seenPostIds = new Set<string>();
+    const seenUrls = new Set<string>();
+    const query = new URLSearchParams({
+      is_published: 'false',
+      fields: 'message,scheduled_publish_time,id',
+      limit: '100',
+      access_token: accessToken,
+    });
+    let nextUrl: string | undefined =
+      `https://graph.facebook.com/${META_GRAPH_API_VERSION}/` +
+      `${encodeURIComponent(pageId)}/promotable_posts?${query.toString()}`;
+
+    while (nextUrl && !seenUrls.has(nextUrl)) {
+      seenUrls.add(nextUrl);
+      const response = await fetch(nextUrl);
+      const body = await response.json();
+
+      if (!response.ok || body.error) {
+        throw new Error(
+          body.error?.message ||
+            `Facebook scheduled posts request failed (${response.status})`
+        );
+      }
+
+      for (const post of body.data || []) {
+        const scheduledAt = Number(post.scheduled_publish_time);
+        if (
+          !post.id ||
+          seenPostIds.has(post.id) ||
+          !Number.isFinite(scheduledAt) ||
+          scheduledAt * 1000 <= Date.now()
+        ) {
+          continue;
+        }
+
+        seenPostIds.add(post.id);
+        scheduledPosts.push({
+          id: post.id,
+          content: post.message || '',
+          publishDate: new Date(scheduledAt * 1000),
+        });
+      }
+
+      nextUrl = body.paging?.next;
+    }
+
+    return scheduledPosts;
+  }
+
+  getNativeScheduledPosts(accessToken: string, pageId: string) {
+    return this.getScheduledPosts(accessToken, pageId);
   }
 
   async fetchPageInformation(accessToken: string, data: { page: string }) {

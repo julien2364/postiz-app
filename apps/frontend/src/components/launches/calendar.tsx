@@ -1021,16 +1021,19 @@ const CalendarItem: FC<{
   } = props;
   const { disableXAnalytics } = useVariables();
   const user = useUser();
+  const isImported = post.creationMethod === 'IMPORTED';
   const showCreationMethodBadge =
-    user?.impersonate &&
-    post.creationMethod &&
-    post.creationMethod !== 'UNKNOWN';
+    isImported ||
+    (user?.impersonate &&
+      post.creationMethod &&
+      post.creationMethod !== 'UNKNOWN');
   const preview = useCallback(() => {
     window.open(`/p/` + post.id + '?share=true', '_blank');
   }, [post]);
   const [{ opacity }, dragRef] = useDrag(
     () => ({
       type: 'post',
+      canDrag: !isImported,
       item: {
         id: post.id,
         interval: !!post.intervalInDays,
@@ -1040,7 +1043,7 @@ const CalendarItem: FC<{
         opacity: monitor.isDragging() ? 0 : 1,
       }),
     }),
-    []
+    [date, isImported, post.id, post.intervalInDays]
   );
   return (
     <div
@@ -1142,21 +1145,24 @@ const CalendarItem: FC<{
         ) : (
           <></>
         )}{' '}
-        <div
-          className={clsx(
-            'hidden group-hover:block hover:underline cursor-pointer',
-            post?.tags?.[0]?.tag?.color && 'mix-blend-difference'
-          )}
-          onClick={deletePost}
-        >
-          <DeletePost />
-        </div>
+        {!isImported && (
+          <div
+            className={clsx(
+              'hidden group-hover:block hover:underline cursor-pointer',
+              post?.tags?.[0]?.tag?.color && 'mix-blend-difference'
+            )}
+            onClick={deletePost}
+          >
+            <DeletePost />
+          </div>
+        )}
       </div>
       <div
-        onClick={editPost}
+        onClick={isImported ? undefined : editPost}
         className={clsx(
           'gap-[5px] w-full flex h-full flex-1 rounded-br-[10px] rounded-bl-[10px] p-[8px] text-[14px] bg-newColColor',
           'relative',
+          isImported && 'cursor-default',
           isBeforeNow && '!grayscale'
         )}
       >

@@ -26,6 +26,7 @@ import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
 import useCookie from 'react-use-cookie';
 import { Onboarding } from '@gitroom/frontend/components/onboarding/onboarding';
+import { ImportScheduledPosts } from '@gitroom/frontend/components/launches/import.scheduled.posts';
 
 export const SVGLine = () => {
   return (
@@ -539,6 +540,7 @@ export const LaunchesComponent = () => {
               <AddProviderButton update={() => update(true)} />
               <div className="flex gap-[8px] group-[.sidebar]:flex-col">
                 {sortedIntegrations?.length > 0 && <NewPost />}
+                <ImportScheduledPosts />
                 {sortedIntegrations?.length > 0 &&
                   user?.tier?.ai &&
                   billingEnabled && <GeneratorComponent />}

@@ -69,6 +69,11 @@ export class PostsController {
     return { ask: this._shortLinkService.askShortLinkedin(body.messages) };
   }
 
+  @Post('/import-scheduled')
+  async importScheduledPosts(@GetOrgFromRequest() org: Organization) {
+    return this._postsService.importScheduledPosts(org.id);
+  }
+
   @Post('/:id/comments')
   async createComment(
     @GetOrgFromRequest() org: Organization,

@@ -16,6 +16,8 @@ import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import utc from 'dayjs/plugin/utc';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateTagDto } from '@gitroom/nestjs-libraries/dtos/posts/create.tag.dto';
+import { createHash } from 'crypto';
+import { NativeScheduledPost } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
 
 dayjs.extend(isoWeek);
 dayjs.extend(weekOfYear);
@@ -224,7 +226,9 @@ export class PostsRepository {
     const stateAndDate =
       stateFilter === 'scheduled'
         ? {
-            state: State.QUEUE,
+            state: {
+              in: [State.QUEUE, State.EXTERNAL],
+            },
           }
         : stateFilter === 'draft'
         ? { state: State.DRAFT }
@@ -232,7 +236,13 @@ export class PostsRepository {
         ? { state: State.PUBLISHED }
         : {
             state: {
-              in: [State.QUEUE, State.DRAFT, State.PUBLISHED, State.ERROR],
+              in: [
+                State.QUEUE,
+                State.DRAFT,
+                State.PUBLISHED,
+                State.ERROR,
+                State.EXTERNAL,
+              ],
             },
           };
 
@@ -503,6 +513,96 @@ export class PostsRepository {
         ],
       },
     });
+  }
+
+  async syncImportedScheduledPosts(
+    orgId: string,
+    integrationId: string,
+    providerIdentifier: string,
+    scheduledPosts: NativeScheduledPost[]
+  ) {
+    const existing = await this._post.model.post.findMany({
+      where: {
+        organizationId: orgId,
+        integrationId,
+        creationMethod: CreationMethod.IMPORTED,
+      },
+      select: {
+        id: true,
+        releaseId: true,
+        deletedAt: true,
+      },
+    });
+    const existingIds = new Set(existing.map((post) => post.id));
+    const nativeIds = new Set(scheduledPosts.map((post) => post.id));
+    let created = 0;
+
+    for (const scheduledPost of scheduledPosts) {
+      const hash = createHash('sha256')
+        .update(`${integrationId}:${scheduledPost.id}`)
+        .digest('hex')
+        .slice(0, 24);
+      const id = `native_${hash}`;
+      const data = {
+        state: State.EXTERNAL,
+        publishDate: scheduledPost.publishDate,
+        content: scheduledPost.content,
+        group: id,
+        releaseId: scheduledPost.id,
+        releaseURL: scheduledPost.releaseURL || null,
+        settings: JSON.stringify({
+          ...(scheduledPost.settings || {}),
+          __type: providerIdentifier,
+          __nativeScheduled: true,
+          __nativeId: scheduledPost.id,
+        }),
+        image: JSON.stringify(scheduledPost.image || []),
+        creationMethod: CreationMethod.IMPORTED,
+        deletedAt: null,
+      };
+
+      if (!existingIds.has(id)) {
+        created += 1;
+      }
+
+      await this._post.model.post.upsert({
+        where: { id },
+        create: {
+          id,
+          ...data,
+          approvedSubmitForOrder: APPROVED_SUBMIT_FOR_ORDER.NO,
+          organization: { connect: { id: orgId } },
+          integration: {
+            connect: { id: integrationId, organizationId: orgId },
+          },
+        },
+        update: data,
+      });
+    }
+
+    const staleIds = existing
+      .filter(
+        (post) =>
+          !post.deletedAt && !!post.releaseId && !nativeIds.has(post.releaseId)
+      )
+      .map((post) => post.id);
+    if (staleIds.length) {
+      await this._post.model.post.updateMany({
+        where: {
+          id: { in: staleIds },
+          organizationId: orgId,
+          integrationId,
+          creationMethod: CreationMethod.IMPORTED,
+        },
+        data: { deletedAt: new Date() },
+      });
+    }
+
+    return {
+      created,
+      updated: scheduledPosts.length - created,
+      removed: staleIds.length,
+    };
   }
 
   async createOrUpdatePost(

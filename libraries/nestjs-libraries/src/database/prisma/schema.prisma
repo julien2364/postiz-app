@@ -916,6 +916,7 @@ enum State {
   PUBLISHED
   ERROR
   DRAFT
+  EXTERNAL
 }
 
 enum SubscriptionTier {
@@ -959,6 +960,7 @@ enum CreationMethod {
   API
   AUTOPOST
   CLI
+  IMPORTED
 }
 
 enum ShortLinkPreference {

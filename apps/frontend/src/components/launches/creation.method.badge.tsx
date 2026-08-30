@@ -1,7 +1,14 @@
 import { FC } from 'react';
 import clsx from 'clsx';
 
-type CreationMethod = 'UNKNOWN' | 'WEB' | 'API' | 'MCP' | 'AUTOPOST' | 'CLI';
+type CreationMethod =
+  | 'UNKNOWN'
+  | 'WEB'
+  | 'API'
+  | 'MCP'
+  | 'AUTOPOST'
+  | 'CLI'
+  | 'IMPORTED';
 
 interface Props {
   creationMethod?: CreationMethod | string | null;
@@ -11,7 +18,13 @@ interface Props {
 }
 
 const tooltipFor = (m: string) =>
-  m === 'AUTOPOST' ? 'Auto-posted by system' : `Created via ${m}`;
+  m === 'AUTOPOST'
+    ? 'Auto-posted by system'
+    : m === 'IMPORTED'
+    ? 'Scheduled in the native app (read-only in Postiz)'
+    : `Created via ${m}`;
+
+const labelFor = (m: string) => (m === 'IMPORTED' ? 'NATIVE APP' : m);
 
 export const CreationMethodBadge: FC<Props> = ({
   creationMethod,
@@ -38,13 +51,15 @@ export const CreationMethodBadge: FC<Props> = ({
         creationMethod === 'MCP' && 'bg-[#9333ea]',
         creationMethod === 'AUTOPOST' && 'bg-[#d97706]',
         creationMethod === 'CLI' && 'bg-[#0f766e]',
+        creationMethod === 'IMPORTED' && 'bg-[#be185d]',
         className
       )}
       style={ringColor ? { boxShadow: `0 0 0 2px ${ringColor}` } : undefined}
       data-tooltip-id="tooltip"
       data-tooltip-content={tooltipFor(creationMethod)}
+      aria-label={tooltipFor(creationMethod)}
     >
-      {creationMethod}
+      {labelFor(creationMethod)}
     </div>
   );
 };

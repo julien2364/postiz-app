@@ -1,6 +1,7 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  NativeScheduledPost,
   PendingCheckResponse,
   PostDetails,
   PostResponse,
@@ -357,6 +358,102 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
       console.error('Failed to fetch YouTube channels:', error);
       return [];
     }
+  }
+
+  async getScheduledVideos(
+    accessToken: string
+  ): Promise<NativeScheduledPost[]> {
+    const { client, youtube } = clientAndYoutube();
+    client.setCredentials({ access_token: accessToken });
+    const youtubeClient = youtube(client);
+
+    const channelsResponse = await youtubeClient.channels.list({
+      part: ['contentDetails'],
+      mine: true,
+    });
+    const uploadPlaylistIds = (channelsResponse.data.items || [])
+      .map((channel) => channel.contentDetails?.relatedPlaylists?.uploads)
+      .filter((id): id is string => !!id);
+
+    const videoIds = new Set<string>();
+    for (const playlistId of uploadPlaylistIds) {
+      let pageToken: string | undefined;
+      do {
+        const playlistResponse = await youtubeClient.playlistItems.list({
+          part: ['contentDetails'],
+          playlistId,
+          maxResults: 50,
+          ...(pageToken ? { pageToken } : {}),
+        });
+
+        for (const item of playlistResponse.data.items || []) {
+          if (item.contentDetails?.videoId) {
+            videoIds.add(item.contentDetails.videoId);
+          }
+        }
+
+        pageToken = playlistResponse.data.nextPageToken || undefined;
+      } while (pageToken);
+    }
+
+    const ids = [...videoIds];
+    const scheduledVideos: NativeScheduledPost[] = [];
+    for (let index = 0; index < ids.length; index += 50) {
+      const response = await youtubeClient.videos.list({
+        part: ['snippet', 'status'],
+        id: ids.slice(index, index + 50),
+        maxResults: 50,
+      });
+
+      for (const video of response.data.items || []) {
+        const publishAt = video.status?.publishAt;
+        if (
+          !video.id ||
+          video.status?.privacyStatus !== 'private' ||
+          !publishAt ||
+          new Date(publishAt).getTime() <= Date.now()
+        ) {
+          continue;
+        }
+
+        const thumbnail =
+          video.snippet?.thumbnails?.high?.url ||
+          video.snippet?.thumbnails?.medium?.url ||
+          video.snippet?.thumbnails?.default?.url;
+        scheduledVideos.push({
+          id: video.id,
+          content: video.snippet?.title || video.snippet?.description || '',
+          publishDate: new Date(publishAt),
+          releaseURL: `https://www.youtube.com/watch?v=${encodeURIComponent(
+            video.id
+          )}`,
+          ...(thumbnail
+            ? {
+                image: [
+                  {
+                    id: `youtube-thumbnail-${video.id}`,
+                    name: `${video.id}.jpg`,
+                    path: thumbnail,
+                    type: 'image' as const,
+                  },
+                ],
+              }
+            : {}),
+          settings: {
+            title: video.snippet?.title || '',
+            description: video.snippet?.description || '',
+          },
+        });
+      }
+    }
+
+    return scheduledVideos.sort(
+      (a, b) => a.publishDate.getTime() - b.publishDate.getTime()
+    );
+  }
+
+  getNativeScheduledPosts(accessToken: string) {
+    return this.getScheduledVideos(accessToken);
   }
 
   async fetchPageInformation(accessToken: string, data: { id: string }) {

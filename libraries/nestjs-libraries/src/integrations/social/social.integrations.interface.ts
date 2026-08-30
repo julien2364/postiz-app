@@ -81,6 +81,20 @@ export type AuthTokenDetails = {
   }[];
 };
 
+export type NativeScheduledPost = {
+  id: string;
+  content: string;
+  publishDate: Date;
+  releaseURL?: string;
+  image?: Array<{
+    id: string;
+    name: string;
+    path: string;
+    type: 'image';
+  }>;
+  settings?: Record<string, any>;
+};
+
 export interface ISocialMediaIntegration {
   post(
     id: string,
@@ -224,4 +238,13 @@ export interface SocialProvider
     accessToken: string,
     data: any
   ): Promise<FetchPageInformationResult>;
+  getScheduledPosts?(
+    accessToken: string,
+    pageId: string
+  ): Promise<NativeScheduledPost[]>;
+  getScheduledVideos?(accessToken: string): Promise<NativeScheduledPost[]>;
+  getNativeScheduledPosts?(
+    accessToken: string,
+    integrationId: string
+  ): Promise<NativeScheduledPost[]>;
 }

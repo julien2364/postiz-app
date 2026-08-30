@@ -11,11 +11,7 @@ export const ImportScheduledPosts = () => {
   const { integrations, reloadCalendarView } = useCalendar();
   const [loading, setLoading] = useState(false);
   const hasSupportedIntegration = integrations.some(
-    (integration) =>
-      ['facebook', 'youtube'].includes(integration.identifier) &&
-      !integration.disabled &&
-      !integration.inBetweenSteps &&
-      !integration.refreshNeeded
+    (integration) => ['facebook', 'youtube'].includes(integration.identifier)
   );
 
   const importScheduled = useCallback(async () => {
@@ -61,7 +57,10 @@ export const ImportScheduledPosts = () => {
       type="button"
       disabled={loading}
       onClick={importScheduled}
-      aria-label={t('import_native_schedules', 'Import native schedules')}
+      aria-label={t(
+        'import_native_schedules',
+        'Importer les programmations natives'
+      )}
       className="text-btnText flex-1 p-[10px] group-[.sidebar]:p-0 min-h-[44px] max-h-[44px] rounded-md bg-btnSimple flex justify-center items-center gap-[5px] outline-none disabled:opacity-60"
       data-tooltip-id="tooltip"
       data-tooltip-content={t(
@@ -88,7 +87,10 @@ export const ImportScheduledPosts = () => {
         <path d="M18.9 15A8 8 0 0 1 5.6 18.4L4 17" />
       </svg>
       <div className="flex-1 text-start text-[14px] group-[.sidebar]:hidden">
-        {t('import_native_schedules', 'Import native schedules')}
+        {t(
+          'import_native_schedules',
+          'Importer les programmations natives'
+        )}
       </div>
     </button>
   );

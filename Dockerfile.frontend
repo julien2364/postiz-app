@@ -14,11 +14,14 @@ ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=4200
 
+RUN corepack enable && corepack prepare pnpm@10.6.1 --activate
+
 WORKDIR /app
 
 COPY --from=builder /app/apps/frontend/public ./apps/frontend/public
 COPY --from=builder /app/apps/frontend/.next/standalone ./apps/frontend/.next/standalone
 COPY --from=builder /app/apps/frontend/.next/static ./apps/frontend/.next/static
 COPY --from=builder /app/node_modules/next/node_modules/@swc/helpers ./apps/frontend/.next/standalone/node_modules/next/node_modules/@swc/helpers
+COPY var/docker/frontend.standalone.package.json ./apps/frontend/package.json
 
 CMD ["node", "apps/frontend/.next/standalone/apps/frontend/server.js"]

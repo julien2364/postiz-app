@@ -1,0 +1,7 @@
+{
+  "name": "postiz-frontend-standalone",
+  "private": true,
+  "scripts": {
+    "start": "node .next/standalone/apps/frontend/server.js"
+  }
+}

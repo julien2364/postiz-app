@@ -8,11 +8,8 @@ export const ImportScheduledPosts = () => {
   const fetch = useFetch();
   const toaster = useToaster();
   const t = useT();
-  const { integrations, reloadCalendarView } = useCalendar();
+  const { reloadCalendarView } = useCalendar();
   const [loading, setLoading] = useState(false);
-  const hasSupportedIntegration = integrations.some(
-    (integration) => ['facebook', 'youtube'].includes(integration.identifier)
-  );
 
   const importScheduled = useCallback(async () => {
     setLoading(true);
@@ -48,10 +45,6 @@ export const ImportScheduledPosts = () => {
     }
   }, [fetch, reloadCalendarView, t, toaster]);
 
-  if (!hasSupportedIntegration) {
-    return null;
-  }
-
   return (
     <button
       type="button"
@@ -65,7 +58,7 @@ export const ImportScheduledPosts = () => {
       data-tooltip-id="tooltip"
       data-tooltip-content={t(
         'import_native_schedules_tooltip',
-        'Import read-only schedules from supported native apps'
+        'Importer en lecture seule les programmations Facebook et YouTube'
       )}
     >
       <svg

@@ -23,5 +23,7 @@ COPY --from=builder /app/apps/frontend/.next/standalone ./apps/frontend/.next/st
 COPY --from=builder /app/apps/frontend/.next/static ./apps/frontend/.next/static
 COPY --from=builder /app/node_modules/next/node_modules/@swc/helpers ./apps/frontend/.next/standalone/node_modules/next/node_modules/@swc/helpers
 COPY var/docker/frontend.standalone.package.json ./apps/frontend/package.json
+COPY var/docker/railway-cd-entrypoint.sh /usr/local/bin/cd
+RUN chmod +x /usr/local/bin/cd
 
 CMD ["node", "apps/frontend/.next/standalone/apps/frontend/server.js"]

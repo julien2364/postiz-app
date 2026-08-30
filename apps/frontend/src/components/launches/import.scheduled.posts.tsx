@@ -12,7 +12,7 @@ export const ImportScheduledPosts = () => {
   const [loading, setLoading] = useState(false);
   const hasSupportedIntegration = integrations.some(
     (integration) =>
-      integration.nativeSchedulingImport &&
+      ['facebook', 'youtube'].includes(integration.identifier) &&
       !integration.disabled &&
       !integration.inBetweenSteps &&
       !integration.refreshNeeded

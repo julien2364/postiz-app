@@ -85,7 +85,10 @@ export async function simpleUpload(
   _contentType: string
 ) {
   const detected = await fileTypeFromBuffer(data);
-  if (!detected || !Object.values(ALLOWED_EXT_TO_MIME).includes(detected.mime)) {
+  if (
+    !detected ||
+    !Object.values(ALLOWED_EXT_TO_MIME).includes(detected.mime)
+  ) {
     throw new Error('Unsupported file type.');
   }
   const fileExtension = `.${detected.ext}`;
@@ -97,6 +100,7 @@ export async function simpleUpload(
     Key: randomFilename,
     Body: data,
     ContentType: safeContentType,
+    CacheControl: 'public, max-age=300, must-revalidate',
   };
 
   const command = new PutObjectCommand({ ...params });
@@ -119,6 +123,7 @@ export async function createMultipartUpload(req: Request, res: Response) {
       Bucket: CLOUDFLARE_BUCKETNAME,
       Key: `${randomFilename}`,
       ContentType: safeContentType,
+      CacheControl: 'public, max-age=300, must-revalidate',
       Metadata: {
         'x-amz-meta-file-hash': fileHash,
       },
@@ -279,4 +284,14 @@ export async function signPart(req: Request, res: Response) {
   return res.status(200).json({
     url: url,
   });
+}
+
+export function getR2Object(key: string, range?: string) {
+  return R2.send(
+    new GetObjectCommand({
+      Bucket: CLOUDFLARE_BUCKETNAME,
+      Key: key,
+      ...(range ? { Range: range } : {}),
+    })
+  );
 }

@@ -49,7 +49,7 @@ export const GET = async (
       // Set the content-length header
       'Last-Modified': fileStats.mtime.toUTCString(),
       // Set the last-modified header
-      'Cache-Control': 'public, max-age=31536000, immutable', // Example cache-control header
+      'Cache-Control': 'public, max-age=300, must-revalidate',
     },
   });
 };

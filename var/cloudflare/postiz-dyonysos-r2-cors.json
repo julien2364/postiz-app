@@ -1,0 +1,13 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": ["https://social.dyonysos.fr"],
+        "methods": ["PUT"],
+        "headers": ["*"]
+      },
+      "exposeHeaders": ["ETag"],
+      "maxAgeSeconds": 300
+    }
+  ]
+}

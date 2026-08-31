@@ -22,7 +22,10 @@ import { extend } from 'dayjs';
 import useCookie from 'react-use-cookie';
 import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
 import { timer } from '@gitroom/helpers/utils/timer';
-import { expandPostsList, expandPosts } from '@gitroom/helpers/utils/posts.list.minify';
+import {
+  expandPostsList,
+  expandPosts,
+} from '@gitroom/helpers/utils/posts.list.minify';
 extend(isoWeek);
 extend(weekOfYear);
 
@@ -32,6 +35,9 @@ export const CalendarContext = createContext({
   startDate: newDayjs().startOf('isoWeek').format('YYYY-MM-DD'),
   endDate: newDayjs().endOf('isoWeek').format('YYYY-MM-DD'),
   customer: null as string | null,
+  providers: [] as string[],
+  sources: [] as string[],
+  states: [] as string[],
   loading: true,
   sets: [] as { name: string; id: string; content: string[] }[],
   signature: undefined as any,
@@ -60,6 +66,9 @@ export const CalendarContext = createContext({
     endDate: string;
     display: 'week' | 'month' | 'day' | 'list';
     customer: string | null;
+    providers: string[];
+    sources: string[];
+    states: string[];
   }) => {
     /** empty **/
   },
@@ -160,7 +169,11 @@ export const CalendarWeekProvider: FC<{
   // Initialize with current date range based on URL params or defaults
   const initStartDate = searchParams.get('startDate');
   const initEndDate = searchParams.get('endDate');
-  const initCustomer = searchParams.get('customer');
+  const initCustomer =
+    searchParams.get('customers') || searchParams.get('customer');
+  const initProviders = searchParams.get('providers');
+  const initSources = searchParams.get('sources');
+  const initStates = searchParams.get('states');
 
   const initialRange =
     initStartDate && initEndDate
@@ -171,6 +184,9 @@ export const CalendarWeekProvider: FC<{
     startDate: initialRange.startDate,
     endDate: initialRange.endDate,
     customer: initCustomer || null,
+    providers: initProviders?.split(',').filter(Boolean) || [],
+    sources: initSources?.split(',').filter(Boolean) || [],
+    states: initStates?.split(',').filter(Boolean) || [],
     display,
   });
 
@@ -179,7 +195,10 @@ export const CalendarWeekProvider: FC<{
       display: filters.display,
       startDate: filters.startDate,
       endDate: filters.endDate,
-      customer: filters?.customer?.toString() || '',
+      customers: filters?.customer?.toString() || '',
+      providers: filters.providers.join(','),
+      sources: filters.sources.join(','),
+      states: filters.states.join(','),
     }).toString();
   }, [filters]);
 
@@ -187,7 +206,10 @@ export const CalendarWeekProvider: FC<{
   const loadData = useCallback(async () => {
     const modifiedParams = new URLSearchParams({
       display: filters.display,
-      customer: filters?.customer?.toString() || '',
+      customers: filters?.customer?.toString() || '',
+      providers: filters.providers.join(','),
+      sources: filters.sources.join(','),
+      states: filters.states.join(','),
       startDate: newDayjs(filters.startDate).startOf('day').utc().format(),
       endDate: newDayjs(filters.endDate).endOf('day').utc().format(),
     }).toString();
@@ -201,10 +223,24 @@ export const CalendarWeekProvider: FC<{
     return new URLSearchParams({
       page: listPage.toString(),
       limit: '100',
-      customer: filters?.customer?.toString() || '',
+      startDate: newDayjs(filters.startDate).startOf('day').utc().format(),
+      endDate: newDayjs(filters.endDate).endOf('day').utc().format(),
+      customers: filters?.customer?.toString() || '',
+      providers: filters.providers.join(','),
+      sources: filters.sources.join(','),
+      states: filters.states.join(','),
       state: listState,
     }).toString();
-  }, [listPage, filters.customer, listState]);
+  }, [
+    listPage,
+    filters.startDate,
+    filters.endDate,
+    filters.customer,
+    filters.providers,
+    filters.sources,
+    filters.states,
+    listState,
+  ]);
 
   const loadListData = useCallback(async () => {
     const response = await fetch(`/posts/list?${listParams}`);
@@ -216,16 +252,12 @@ export const CalendarWeekProvider: FC<{
     data: calendarData,
     isLoading: calendarIsLoading,
     mutate: mutateCalendar,
-  } = useSWR(
-    filters.display !== 'list' ? `/posts-${params}` : null,
-    loadData,
-    {
-      refreshInterval: 3600000,
-      refreshWhenOffline: false,
-      refreshWhenHidden: false,
-      revalidateOnFocus: false,
-    }
-  );
+  } = useSWR(filters.display !== 'list' ? `/posts-${params}` : null, loadData, {
+    refreshInterval: 3600000,
+    refreshWhenOffline: false,
+    refreshWhenHidden: false,
+    revalidateOnFocus: false,
+  });
 
   // SWR for list view
   const {
@@ -274,6 +306,9 @@ export const CalendarWeekProvider: FC<{
       endDate: string;
       display: 'week' | 'month' | 'day' | 'list';
       customer: string | null;
+      providers: string[];
+      sources: string[];
+      states: string[];
     }) => {
       setDisplaySaved(newFilters.display);
       setFilters(newFilters);
@@ -288,7 +323,14 @@ export const CalendarWeekProvider: FC<{
         `startDate=${newFilters.startDate}`,
         `endDate=${newFilters.endDate}`,
         `display=${newFilters.display}`,
-        newFilters.customer ? `customer=${newFilters.customer}` : ``,
+        newFilters.customer ? `customers=${newFilters.customer}` : ``,
+        newFilters.providers.length
+          ? `providers=${newFilters.providers.join(',')}`
+          : ``,
+        newFilters.sources.length
+          ? `sources=${newFilters.sources.join(',')}`
+          : ``,
+        newFilters.states.length ? `states=${newFilters.states.join(',')}` : ``,
       ].filter((f) => f);
       window.history.replaceState(null, '', `/launches?${path.join('&')}`);
     },
@@ -296,7 +338,10 @@ export const CalendarWeekProvider: FC<{
   );
 
   const posts = useMemo(() => calendarData?.posts || [], [calendarData?.posts]);
-  const comments = useMemo(() => calendarData?.comments || [], [calendarData?.comments]);
+  const comments = useMemo(
+    () => calendarData?.comments || [],
+    [calendarData?.comments]
+  );
 
   // List view data
   const listPosts = useMemo(() => listData?.posts || [], [listData?.posts]);
@@ -333,7 +378,8 @@ export const CalendarWeekProvider: FC<{
   }, [mutateCalendar, mutateList]);
 
   // Determine loading state based on current view
-  const loading = filters.display === 'list' ? listIsLoading : calendarIsLoading;
+  const loading =
+    filters.display === 'list' ? listIsLoading : calendarIsLoading;
 
   return (
     <CalendarContext.Provider

@@ -1,15 +1,11 @@
-import { IsOptional, IsString, IsDateString } from 'class-validator';
+import { IsDateString, IsOptional, IsString } from 'class-validator';
 
-export class GetPostsDto {
+export class AnalyticsOverviewDto {
   @IsDateString()
   startDate: string;
 
   @IsDateString()
   endDate: string;
-
-  @IsOptional()
-  @IsString()
-  customer: string;
 
   @IsOptional()
   @IsString()

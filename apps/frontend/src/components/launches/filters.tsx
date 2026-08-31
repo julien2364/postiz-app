@@ -1,13 +1,17 @@
 'use client';
 
-import { useCalendar, ListStateFilter } from '@gitroom/frontend/components/launches/calendar.context';
+import {
+  useCalendar,
+  ListStateFilter,
+} from '@gitroom/frontend/components/launches/calendar.context';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { SelectCustomer } from '@gitroom/frontend/components/launches/select.customer';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import i18next from 'i18next';
 import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
+import { MultiSelectFilter } from '@gitroom/frontend/components/filters/multi.select.filter';
 
 // Helper function to get start and end dates based on display type
 function getDateRange(
@@ -82,8 +86,11 @@ export const Filters = () => {
     calendar.setFilters({
       startDate: currentRange.startDate,
       endDate: currentRange.endDate,
-      display: calendar.display as 'day' | 'week' | 'month',
+      display: calendar.display as 'day' | 'week' | 'month' | 'list',
       customer: calendar.customer,
+      providers: calendar.providers,
+      sources: calendar.sources,
+      states: calendar.states,
     });
   }, [calendar]);
 
@@ -102,6 +109,9 @@ export const Filters = () => {
       endDate: range.endDate,
       display: 'day',
       customer: calendar.customer,
+      providers: calendar.providers,
+      sources: calendar.sources,
+      states: calendar.states,
     });
   }, [calendar]);
 
@@ -120,6 +130,9 @@ export const Filters = () => {
       endDate: range.endDate,
       display: 'week',
       customer: calendar.customer,
+      providers: calendar.providers,
+      sources: calendar.sources,
+      states: calendar.states,
     });
   }, [calendar]);
 
@@ -138,6 +151,9 @@ export const Filters = () => {
       endDate: range.endDate,
       display: 'month',
       customer: calendar.customer,
+      providers: calendar.providers,
+      sources: calendar.sources,
+      states: calendar.states,
     });
   }, [calendar]);
 
@@ -152,6 +168,9 @@ export const Filters = () => {
       endDate: range.endDate,
       display: 'list',
       customer: calendar.customer,
+      providers: calendar.providers,
+      sources: calendar.sources,
+      states: calendar.states,
     });
   }, [calendar]);
 
@@ -166,6 +185,9 @@ export const Filters = () => {
       endDate: range.endDate,
       display: 'week',
       customer: calendar.customer,
+      providers: calendar.providers,
+      sources: calendar.sources,
+      states: calendar.states,
     });
   }, [calendar]);
 
@@ -177,8 +199,11 @@ export const Filters = () => {
       calendar.setFilters({
         startDate: calendar.startDate,
         endDate: calendar.endDate,
-        display: calendar.display as 'day' | 'week' | 'month',
+        display: calendar.display as 'day' | 'week' | 'month' | 'list',
         customer: customer,
+        providers: calendar.providers,
+        sources: calendar.sources,
+        states: calendar.states,
       });
     },
     [calendar]
@@ -209,8 +234,11 @@ export const Filters = () => {
     calendar.setFilters({
       startDate: range.startDate,
       endDate: range.endDate,
-      display: calendar.display as 'day' | 'week' | 'month',
+      display: calendar.display as 'day' | 'week' | 'month' | 'list',
       customer: calendar.customer,
+      providers: calendar.providers,
+      sources: calendar.sources,
+      states: calendar.states,
     });
   }, [calendar]);
 
@@ -239,8 +267,11 @@ export const Filters = () => {
     calendar.setFilters({
       startDate: range.startDate,
       endDate: range.endDate,
-      display: calendar.display as 'day' | 'week' | 'month',
+      display: calendar.display as 'day' | 'week' | 'month' | 'list',
       customer: calendar.customer,
+      providers: calendar.providers,
+      sources: calendar.sources,
+      states: calendar.states,
     });
   }, [calendar]);
 
@@ -286,8 +317,38 @@ export const Filters = () => {
     }
   }, [calendar]);
 
+  const providerOptions = useMemo(() => {
+    const providers = new Set(
+      calendar.integrations.map((integration) => integration.identifier)
+    );
+    return Array.from(providers)
+      .sort()
+      .map((provider) => ({
+        value: provider,
+        label: provider
+          .split('-')
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(' '),
+      }));
+  }, [calendar.integrations]);
+
+  const updateArrayFilter = useCallback(
+    (key: 'providers' | 'sources' | 'states', values: string[]) => {
+      calendar.setFilters({
+        startDate: calendar.startDate,
+        endDate: calendar.endDate,
+        display: calendar.display as 'day' | 'week' | 'month' | 'list',
+        customer: calendar.customer,
+        providers: key === 'providers' ? values : calendar.providers,
+        sources: key === 'sources' ? values : calendar.sources,
+        states: key === 'states' ? values : calendar.states,
+      });
+    },
+    [calendar]
+  );
+
   return (
-    <div className="text-textColor flex flex-col md:flex-row gap-[8px] items-center select-none">
+    <div className="text-textColor flex flex-col md:flex-row flex-wrap gap-[8px] items-center select-none">
       {!isListView && (
         <div className="flex flex-grow flex-row items-center gap-[10px]">
           <div className="border h-[42px] border-newTableBorder bg-newTableBorder gap-[1px] flex items-center rounded-[8px] overflow-hidden">
@@ -379,7 +440,8 @@ export const Filters = () => {
             </div>
             <div className="min-w-[200px] text-center bg-newBgColorInner h-full flex items-center justify-center">
               <div className="py-[3px] px-[9px] rounded-[5px] transition-all text-[14px]">
-                {t('page', 'Page')} {calendar.listPage + 1} {t('of', 'of')} {Math.max(1, calendar.listTotalPages)}
+                {t('page', 'Page')} {calendar.listPage + 1} {t('of', 'of')}{' '}
+                {Math.max(1, calendar.listTotalPages)}
               </div>
             </div>
             <div
@@ -431,6 +493,35 @@ export const Filters = () => {
         onChange={(customer: string) => setCustomer(customer)}
         integrations={calendar.integrations}
       />
+      <MultiSelectFilter
+        label={t('networks', 'Réseaux')}
+        allLabel={t('all_networks', 'Tous les réseaux')}
+        values={calendar.providers}
+        options={providerOptions}
+        onChange={(values) => updateArrayFilter('providers', values)}
+      />
+      <MultiSelectFilter
+        label={t('source', 'Source')}
+        allLabel={t('all_sources', 'Toutes les sources')}
+        values={calendar.sources}
+        options={[
+          { value: 'postiz', label: 'Postiz' },
+          { value: 'imported', label: t('native_app', 'App native') },
+        ]}
+        onChange={(values) => updateArrayFilter('sources', values)}
+      />
+      <MultiSelectFilter
+        label={t('status', 'État')}
+        allLabel={t('all_statuses', 'Tous les états')}
+        values={calendar.states}
+        options={[
+          { value: 'scheduled', label: t('scheduled', 'Programmé') },
+          { value: 'published', label: t('published', 'Publié') },
+          { value: 'draft', label: t('draft', 'Brouillon') },
+          { value: 'error', label: t('error', 'Erreur') },
+        ]}
+        onChange={(values) => updateArrayFilter('states', values)}
+      />
       {!isListView && (
         <div className="flex flex-row p-[4px] border border-newTableBorder rounded-[8px] text-[14px] font-[500]">
           <div
@@ -445,7 +536,8 @@ export const Filters = () => {
           <div
             className={clsx(
               'pt-[6px] pb-[5px] cursor-pointer w-[74px] text-center rounded-[6px]',
-              calendar.display === 'week' && 'text-textItemFocused bg-boxFocused'
+              calendar.display === 'week' &&
+                'text-textItemFocused bg-boxFocused'
             )}
             onClick={setWeek}
           >
@@ -454,7 +546,8 @@ export const Filters = () => {
           <div
             className={clsx(
               'pt-[6px] pb-[5px] cursor-pointer w-[74px] text-center rounded-[6px]',
-              calendar.display === 'month' && 'text-textItemFocused bg-boxFocused'
+              calendar.display === 'month' &&
+                'text-textItemFocused bg-boxFocused'
             )}
             onClick={setMonth}
           >

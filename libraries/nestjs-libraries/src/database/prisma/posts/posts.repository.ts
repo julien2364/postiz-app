@@ -18,11 +18,64 @@ import { v4 as uuidv4 } from 'uuid';
 import { CreateTagDto } from '@gitroom/nestjs-libraries/dtos/posts/create.tag.dto';
 import { createHash } from 'crypto';
 import { NativeScheduledPost } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
+import { AnalyticsOverviewDto } from '@gitroom/nestjs-libraries/dtos/analytics/overview.dto';
 
 dayjs.extend(isoWeek);
 dayjs.extend(weekOfYear);
 dayjs.extend(isSameOrAfter);
 dayjs.extend(utc);
+
+type PostFilterQuery = {
+  customer?: string;
+  customers?: string;
+  providers?: string;
+  sources?: string;
+  states?: string;
+};
+
+const splitCsv = (value?: string) =>
+  (value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const buildPostFilter = (orgId: string, query: PostFilterQuery) => {
+  const customers = splitCsv(query.customers || query.customer);
+  const providers = splitCsv(query.providers);
+  const sources = splitCsv(query.sources);
+  const requestedStates = splitCsv(query.states);
+  const states = new Set<State>();
+
+  requestedStates.forEach((state) => {
+    if (state === 'scheduled') {
+      states.add(State.QUEUE);
+      states.add(State.EXTERNAL);
+      return;
+    }
+
+    const normalized = state.toUpperCase() as State;
+    if (Object.values(State).includes(normalized)) {
+      states.add(normalized);
+    }
+  });
+
+  const onlyImported =
+    sources.includes('imported') && !sources.includes('postiz');
+  const onlyPostiz =
+    sources.includes('postiz') && !sources.includes('imported');
+
+  return {
+    integration: {
+      deletedAt: null,
+      organizationId: orgId,
+      ...(customers.length ? { customerId: { in: customers } } : {}),
+      ...(providers.length ? { providerIdentifier: { in: providers } } : {}),
+    },
+    ...(states.size ? { state: { in: Array.from(states) } } : {}),
+    ...(onlyImported ? { creationMethod: CreationMethod.IMPORTED } : {}),
+    ...(onlyPostiz ? { creationMethod: { not: CreationMethod.IMPORTED } } : {}),
+  };
+};
 
 @Injectable()
 export class PostsRepository {
@@ -159,11 +212,7 @@ export class PostsRepository {
             ],
           },
         ],
-        integration: {
-          deletedAt: null,
-          organizationId: orgId,
-          ...(query.customer ? { customerId: query.customer } : {}),
-        },
+        ...buildPostFilter(orgId, query),
         deletedAt: null,
         parentPostId: null,
       },
@@ -260,24 +309,21 @@ export class PostsRepository {
         },
       ],
       ...stateAndDate,
-      // Published posts were already posted (publishDate in the past), so fetch
-      // all of them; everything else stays upcoming. Ordering handles the rest.
-      ...(stateFilter === 'published'
+      ...(query.startDate && query.endDate
+        ? {
+            publishDate: {
+              gte: dayjs.utc(query.startDate).toDate(),
+              lte: dayjs.utc(query.endDate).toDate(),
+            },
+          }
+        : stateFilter === 'published'
         ? {}
         : { publishDate: { gte: dayjs.utc().toDate() } }),
       deletedAt: null as Date | null,
       parentPostId: null as string | null,
       intervalInDays: null as number | null,
 
-      integration: {
-        deletedAt: null as any,
-        organizationId: orgId,
-        ...(query.customer
-          ? {
-              customerId: query.customer,
-            }
-          : {}),
-      },
+      ...buildPostFilter(orgId, query),
     };
 
     const [posts, total] = await Promise.all([
@@ -322,6 +368,155 @@ export class PostsRepository {
       page,
       limit,
       hasMore: skip + posts.length < total,
+    };
+  }
+
+  async getAnalyticsOverview(orgId: string, query: AnalyticsOverviewDto) {
+    const startDate = dayjs.utc(query.startDate).startOf('day');
+    const endDate = dayjs.utc(query.endDate).endOf('day');
+    const rangeInDays = Math.max(1, endDate.diff(startDate, 'day'));
+    const granularity =
+      rangeInDays <= 31 ? 'day' : rangeInDays <= 180 ? 'week' : 'month';
+
+    const posts = await this._post.model.post.findMany({
+      where: {
+        organizationId: orgId,
+        publishDate: {
+          gte: startDate.toDate(),
+          lte: endDate.toDate(),
+        },
+        deletedAt: null,
+        parentPostId: null,
+        ...buildPostFilter(orgId, query),
+      },
+      select: {
+        state: true,
+        publishDate: true,
+        creationMethod: true,
+        integration: {
+          select: {
+            providerIdentifier: true,
+            customer: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        publishDate: 'asc',
+      },
+    });
+
+    const summary = {
+      total: posts.length,
+      scheduled: 0,
+      published: 0,
+      draft: 0,
+      error: 0,
+      imported: 0,
+    };
+    const series = new Map<
+      string,
+      {
+        date: string;
+        total: number;
+        scheduled: number;
+        published: number;
+        error: number;
+        imported: number;
+      }
+    >();
+    const matrix = new Map<
+      string,
+      {
+        customerId: string;
+        customer: string;
+        providers: Record<string, number>;
+        total: number;
+      }
+    >();
+    const providerTotals: Record<string, number> = {};
+
+    const emptyBucket = (date: string) => ({
+      date,
+      total: 0,
+      scheduled: 0,
+      published: 0,
+      error: 0,
+      imported: 0,
+    });
+    let cursor =
+      granularity === 'day'
+        ? startDate.startOf('day')
+        : granularity === 'week'
+        ? startDate.startOf('isoWeek')
+        : startDate.startOf('month');
+    const lastBucket =
+      granularity === 'day'
+        ? endDate.startOf('day')
+        : granularity === 'week'
+        ? endDate.startOf('isoWeek')
+        : endDate.startOf('month');
+    while (cursor.isSame(lastBucket) || cursor.isBefore(lastBucket)) {
+      const key = cursor.format('YYYY-MM-DD');
+      series.set(key, emptyBucket(key));
+      cursor = cursor.add(1, granularity);
+    }
+
+    posts.forEach((post) => {
+      const scheduled =
+        post.state === State.QUEUE || post.state === State.EXTERNAL;
+      const imported = post.creationMethod === CreationMethod.IMPORTED;
+
+      if (scheduled) summary.scheduled += 1;
+      if (post.state === State.PUBLISHED) summary.published += 1;
+      if (post.state === State.DRAFT) summary.draft += 1;
+      if (post.state === State.ERROR) summary.error += 1;
+      if (imported) summary.imported += 1;
+
+      const publishedAt = dayjs.utc(post.publishDate);
+      const bucketDate =
+        granularity === 'day'
+          ? publishedAt.startOf('day')
+          : granularity === 'week'
+          ? publishedAt.startOf('isoWeek')
+          : publishedAt.startOf('month');
+      const bucketKey = bucketDate.format('YYYY-MM-DD');
+      const bucket = series.get(bucketKey) || emptyBucket(bucketKey);
+      bucket.total += 1;
+      if (scheduled) bucket.scheduled += 1;
+      if (post.state === State.PUBLISHED) bucket.published += 1;
+      if (post.state === State.ERROR) bucket.error += 1;
+      if (imported) bucket.imported += 1;
+      series.set(bucketKey, bucket);
+
+      const customerId = post.integration.customer?.id || 'unclassified';
+      const customer = post.integration.customer?.name || 'Non classifiés';
+      const provider = post.integration.providerIdentifier;
+      const row = matrix.get(customerId) || {
+        customerId,
+        customer,
+        providers: {},
+        total: 0,
+      };
+      row.providers[provider] = (row.providers[provider] || 0) + 1;
+      row.total += 1;
+      matrix.set(customerId, row);
+      providerTotals[provider] = (providerTotals[provider] || 0) + 1;
+    });
+
+    return {
+      summary,
+      granularity,
+      series: Array.from(series.values()),
+      matrix: Array.from(matrix.values()).sort((a, b) =>
+        a.customer.localeCompare(b.customer)
+      ),
+      providerTotals,
+      providers: Object.keys(providerTotals).sort(),
     };
   }
 

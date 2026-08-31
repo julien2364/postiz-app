@@ -5,12 +5,21 @@ import {
   Min,
   Max,
   IsIn,
+  IsDateString,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export type PostListStateFilter = 'all' | 'scheduled' | 'draft' | 'published';
 
 export class GetPostsListDto {
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -27,6 +36,22 @@ export class GetPostsListDto {
   @IsOptional()
   @IsString()
   customer?: string;
+
+  @IsOptional()
+  @IsString()
+  customers?: string;
+
+  @IsOptional()
+  @IsString()
+  providers?: string;
+
+  @IsOptional()
+  @IsString()
+  sources?: string;
+
+  @IsOptional()
+  @IsString()
+  states?: string;
 
   @IsOptional()
   @IsIn(['all', 'scheduled', 'draft', 'published'])

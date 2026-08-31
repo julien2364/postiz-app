@@ -25,6 +25,8 @@ import { UploadFactory } from '@gitroom/nestjs-libraries/upload/upload.factory';
 import { SaveMediaInformationDto } from '@gitroom/nestjs-libraries/dtos/media/save.media.information.dto';
 import { VideoDto } from '@gitroom/nestjs-libraries/dtos/videos/video.dto';
 import { VideoFunctionDto } from '@gitroom/nestjs-libraries/dtos/videos/video.function.dto';
+import { ImportCloudMediaDto } from '@gitroom/nestjs-libraries/dtos/media/import.cloud.media.dto';
+import { HttpException } from '@nestjs/common';
 
 @ApiTags('Media')
 @Controller('/media')
@@ -151,6 +153,65 @@ export class MediaController {
     );
   }
 
+  @Post('/import-cloud-url')
+  async importCloudUrl(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: ImportCloudMediaDto
+  ) {
+    let remoteUrl: URL;
+    try {
+      remoteUrl = new URL(body.url);
+    } catch {
+      throw new HttpException('Invalid media URL', 400);
+    }
+
+    if (body.source === 'google-drive') {
+      const match = remoteUrl.pathname.match(/\/file\/d\/([^/]+)/);
+      const fileId = match?.[1] || remoteUrl.searchParams.get('id');
+      if (!fileId || !/^[a-zA-Z0-9_-]+$/.test(fileId)) {
+        throw new HttpException('Invalid Google Drive file link', 400);
+      }
+      remoteUrl = new URL('https://drive.usercontent.google.com/download');
+      remoteUrl.searchParams.set('id', fileId);
+      remoteUrl.searchParams.set('export', 'download');
+      remoteUrl.searchParams.set('confirm', 't');
+    }
+
+    if (body.source === 'dropbox') {
+      if (!remoteUrl.hostname.endsWith('dropbox.com')) {
+        throw new HttpException('Invalid Dropbox link', 400);
+      }
+      remoteUrl.searchParams.set('dl', '1');
+    }
+
+    if (body.source === 'canva') {
+      const canvaHosts = [
+        'canva.com',
+        'www.canva.com',
+        'media-public.canva.com',
+        'static-cse.canva.com',
+      ];
+      if (!canvaHosts.includes(remoteUrl.hostname)) {
+        throw new HttpException('Invalid Canva link', 400);
+      }
+    }
+
+    try {
+      const uploaded = await this.storage.uploadSimple(remoteUrl.toString());
+      return this._mediaService.saveFile(
+        org.id,
+        uploaded.split('/').pop(),
+        uploaded,
+        body.name || undefined
+      );
+    } catch {
+      throw new HttpException(
+        'The link must be public and point directly to an image or video',
+        400
+      );
+    }
+  }
+
   @Post('/:endpoint')
   async uploadFile(
     @GetOrgFromRequest() org: Organization,
@@ -193,10 +254,12 @@ export class MediaController {
   }
 
   @Post('/video/function')
-  videoFunction(
-    @Body() body: VideoFunctionDto
-  ) {
-    return this._mediaService.videoFunction(body.identifier, body.functionName, body.params);
+  videoFunction(@Body() body: VideoFunctionDto) {
+    return this._mediaService.videoFunction(
+      body.identifier,
+      body.functionName,
+      body.params
+    );
   }
 
   @Get('/generate-video/:type/allowed')

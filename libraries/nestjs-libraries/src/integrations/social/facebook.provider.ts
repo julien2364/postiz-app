@@ -74,7 +74,7 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
       return {
         type: 'refresh-token' as const,
         value: 'Please re-authenticate your Facebook account',
-      };
+      }
     }
 
     if (body.indexOf('REVOKED_ACCESS_TOKEN') > -1) {
@@ -118,7 +118,7 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
       return {
         type: 'bad-body' as const,
         value: 'Invalid file',
-      }
+      };
     }
 
     if (body.indexOf('1404102') > -1) {
@@ -399,14 +399,13 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
     const seenPostIds = new Set<string>();
     const seenUrls = new Set<string>();
     const query = new URLSearchParams({
-      is_published: 'false',
       fields: 'message,scheduled_publish_time,id',
       limit: '100',
       access_token: accessToken,
     });
     let nextUrl: string | undefined =
       `https://graph.facebook.com/${META_GRAPH_API_VERSION}/` +
-      `${encodeURIComponent(pageId)}/promotable_posts?${query.toString()}`;
+      `${encodeURIComponent(pageId)}/scheduled_posts?${query.toString()}`;
 
     while (nextUrl && !seenUrls.has(nextUrl)) {
       seenUrls.add(nextUrl);

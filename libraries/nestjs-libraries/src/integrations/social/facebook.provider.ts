@@ -74,7 +74,7 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
       return {
         type: 'refresh-token' as const,
         value: 'Please re-authenticate your Facebook account',
-      }
+      };
     }
 
     if (body.indexOf('REVOKED_ACCESS_TOKEN') > -1) {
@@ -118,7 +118,7 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
       return {
         type: 'bad-body' as const,
         value: 'Invalid file',
-      };
+      }
     }
 
     if (body.indexOf('1404102') > -1) {

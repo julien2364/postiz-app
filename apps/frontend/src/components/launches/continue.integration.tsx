@@ -107,6 +107,50 @@ export const ContinueIntegration: FC<{
     (async () => {
       const timezone = String(dayjs.tz().utcOffset());
 
+      // Google sign-in reuses the YouTube OAuth callback URL. Its state is
+      // prefixed with `login-`, so it must be completed through the auth
+      // endpoint instead of being mistaken for a new YouTube channel.
+      if (
+        provider === 'youtube' &&
+        typeof modifiedParams.state === 'string' &&
+        modifiedParams.state.startsWith('login-')
+      ) {
+        const login = await window.fetch(
+          `${backendUrl}/auth/oauth/GOOGLE/exists`,
+          {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            body: JSON.stringify({
+              code: modifiedParams.code,
+              state: modifiedParams.state,
+            }),
+          }
+        );
+
+        if (!login.ok) {
+          const message = await login.text().catch(() => '');
+          setErrorMessage(message || 'Could not sign in with Google');
+          setError(true);
+          return;
+        }
+
+        const result = await login.json().catch(() => ({}));
+        if (result.token) {
+          setErrorMessage(
+            'No existing Postiz account is associated with this Google account'
+          );
+          setError(true);
+          return;
+        }
+
+        window.location.href = '/launches';
+        return;
+      }
+
       // Try public endpoint first (handles both public and fallback scenarios)
       let data = await fetch(`/integrations/social-connect/${provider}`, {
         method: 'POST',
